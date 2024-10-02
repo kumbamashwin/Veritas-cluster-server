@@ -170,3 +170,132 @@ Here are some **Business As Usual (BAU)** scenario-based questions for **Veritas
      ```
 
 These scenarios cover typical **BAU tasks** and common challenges encountered in managing Veritas Cluster Server (VCS) environments. Each scenario provides insights into the commands and procedures necessary for maintaining cluster health and ensuring high availability of services.
+To troubleshoot **service group failover issues** in a Veritas Cluster Server (VCS) on Linux, follow these detailed steps:
+
+### **Problem**: Service group does not fail over to a secondary node.
+
+### **Troubleshooting Steps**:
+
+---
+
+#### 1. **Check the Status of the Service Group**
+   - First, verify the state of the service group and its resources on both nodes:
+     ```bash
+     hagrp -state <service_group_name>
+     ```
+   - Look for the current status (`ONLINE`, `OFFLINE`, `FAULTED`) on each node.
+
+---
+
+#### 2. **Check Resource Dependencies**
+   - Sometimes, failover issues occur due to incorrect resource dependencies. To list the resource dependencies for the service group, use:
+     ```bash
+     hagrp -dep <service_group_name>
+     ```
+   - Ensure that all required resources are correctly configured and dependencies are met on the secondary node.
+
+---
+
+#### 3. **Verify Resource States**
+   - Check the state of individual resources within the service group:
+     ```bash
+     hares -state
+     ```
+   - If a resource is in a "FAULTED" state, you need to troubleshoot and clear the fault before a failover can succeed.
+
+---
+
+#### 4. **Test Failover Manually**
+   - If there are no immediate errors, manually attempt to fail over the service group to the secondary node:
+     ```bash
+     hagrp -switch <service_group_name> -to <node_name>
+     ```
+   - Check the logs in `/var/VRTSvcs/log/engine_A.log` or `engine_B.log` for any errors during the failover process.
+
+---
+
+#### 5. **Check Heartbeat Network**
+   - VCS uses heartbeats to communicate between nodes. If the heartbeat fails, the cluster might not detect the node failure correctly.
+   - To verify heartbeat communication, check the status of GAB and LLT:
+     - GAB (Global Atomic Broadcast):
+       ```bash
+       gabconfig -a
+       ```
+       You should see an output showing membership information. Look for a letter "a" indicating that all nodes are communicating.
+     - LLT (Low Latency Transport):
+       ```bash
+       lltstat -nvv
+       ```
+       This will show if nodes are communicating over the heartbeat networks.
+
+---
+
+#### 6. **Investigate Fencing Issues**
+   - If the service group isn't failing over because of fencing issues (e.g., in a split-brain scenario), check the status of fencing:
+     ```bash
+     vxfenadm -d
+     ```
+   - Ensure fencing is configured correctly. If fencing misbehaves, VCS will not allow the service group to fail over to avoid data corruption.
+
+---
+
+#### 7. **Review Logs for Errors**
+   - If the failover attempt failed, check the cluster logs for more specific details:
+     - **Main VCS engine logs**:
+       ```bash
+       tail -f /var/VRTSvcs/log/engine_A.log
+       ```
+       This log will show cluster operations, including any errors related to the failover.
+     - You can also check application-specific logs depending on what resources are involved.
+
+---
+
+#### 8. **Verify Service Group Failover Policies**
+   - Check the service group failover policies to ensure that they are configured correctly:
+     ```bash
+     hagrp -display <service_group_name>
+     ```
+   - Look for attributes like `AutoFailOver`, `FailOverPolicy`, and `Critical`. Ensure that these are set according to your cluster design.
+
+---
+
+#### 9. **Ensure All Required Resources Are Online**
+   - If some resources (like shared disks or networks) are not online on the secondary node, the failover will fail. Check resource states using:
+     ```bash
+     hares -state
+     ```
+
+---
+
+#### 10. **Clear Faults in the Service Group**
+   - If any resource or service group is faulted, it might prevent failover. Clear any faults before retrying the failover:
+     ```bash
+     hagrp -clear <service_group_name> -sys <node_name>
+     ```
+     If a specific resource is faulted, clear the resource fault:
+     ```bash
+     hares -clear <resource_name> -sys <node_name>
+     ```
+
+---
+
+#### 11. **Check Cluster Freeze**
+   - Ensure that the cluster or service group is not frozen, as a frozen state will prevent failover.
+     ```bash
+     hagrp -display <service_group_name> | grep -i frozen
+     ```
+   - If the service group is frozen, unfreeze it:
+     ```bash
+     hagrp -unfreeze <service_group_name> -persistent
+     ```
+
+---
+
+### **Next Steps**
+If the issue persists after performing these checks and tests, further investigation is needed. You may need to:
+
+- Check the specific resource logs (e.g., application, network, or disk resources).
+- Verify any recent changes in the cluster configuration or environment (e.g., patches or network changes).
+- Review all nodes for system resource availability, ensuring that the secondary node is healthy and capable of running the service group.
+
+Would you like more help on specific resource checks or configurations?
